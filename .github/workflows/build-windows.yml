@@ -42,6 +42,13 @@ jobs:
         run: |
           $v = (Get-Content package.json | ConvertFrom-Json).version
           "version=$v" >> $env:GITHUB_OUTPUT
+      - name: checksum
+        shell: pwsh
+        run: |
+          Get-ChildItem build\CashWatch-Setup-*.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)" | Set-Content -Path "$($_.FullName).sha256" -Encoding ascii
+          }
       # הקובץ נשמר גם כ-Artifact (אם נגמרה מכסת האחסון של החשבון – ממשיכים, ה-Release מספיק)
       - uses: actions/upload-artifact@v4
         continue-on-error: true
@@ -55,4 +62,6 @@ jobs:
           tag_name: v${{ steps.ver.outputs.version }}
           name: CashWatch ${{ steps.ver.outputs.version }}
           draft: true
-          files: build/CashWatch-Setup-*.exe
+          files: |
+            build/CashWatch-Setup-*.exe
+            build/CashWatch-Setup-*.exe.sha256

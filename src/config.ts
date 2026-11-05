@@ -102,6 +102,8 @@ export const configSchema = z.object({
     /** מצב בלי דשבורד: לא מגישים את ממשק המשתמש ולא פותחים חלון. נשאר ה-API (ושרת ההגדרות המקומי) */
     headless: z.boolean().default(false),
   }).default({ host: '127.0.0.1', port: 8080, headless: false }),
+  /** עדכון גרסאות מ-GitHub Releases */
+  update: z.object({ autoCheck: z.boolean().default(true), repo: z.string().default('AIIB1010/cashwatch') }).default({ autoCheck: true, repo: 'AIIB1010/cashwatch' }),
   /** חיבורים החוצה: Webhook שמקבל תנועות חדשות וסיכום ריצה (החתימה נשמרת מוצפנת בסודות) */
   integrations: z.object({ webhookUrl: z.string().default('') }).default({ webhookUrl: '' }),
   banks: z.array(bankSchema).default([]),

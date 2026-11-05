@@ -82,6 +82,7 @@ npm run browser-login -- <id>                   # כניסה ראשונה (חל�
 - 🟡 (1.2.17) העלאת אייקון ידנית; תיקון עצירת מופע ישן ב-setup.ps1; תשתית קובץ התקנה (installer/, scripts/stage-windows.mjs, workflow) – **לא נבדקה על Windows/GitHub**.
 - 🟡 (1.3.0) API v1 + טוקן, Webhook, MCP (`src/apiV1.ts`, `webhooks.ts`, `mcp.ts`), headless, הוצאה/הכנסה חד-פעמית, שומר-ראש לריצה תקועה. נבדק מול נתוני דמו בלבד. **ה-API נותן גישה לכל הנתונים הפיננסיים – אסור להחזיר דרכו סודות; בדיקה קיימת ב-test/apiv1.test.ts.**
 - 🟡 (1.3.1) נעילה בסיסמה אופציונלית (`.keyfile.pass`, `Settings.locked`); אל תוסיף קוד שקורא ל-`settings.secrets` בזמן עליית שרת בלי לטפל במצב נעול (מחזיר ריק).
+- 🟡 (1.4.0) מנגנון עדכון מ-GitHub (`update.ts`, `windows/update.ps1`) – **לא נבדק על Windows**; README עם צילומי מסך. אל תשנה את דרישת ה-checksum בלי חתימת קוד חלופית.
 - ⏭ הבא: אימות על Windows אמיתי; קובץ התקנה סופי (Inno Setup + Node נייד); צ'אט Gemini; כניסה עם Google (אם יאושר; ראה DEVELOPER.md §9); אוטומציה בהקמה.
 - 🎯 **חזון:** "עוזר כלכלי אישי" שמותקן פעם אחת, רץ לבד בכל הדלקת מחשב, פשוט ללא ידע טכני, חינמי.
 

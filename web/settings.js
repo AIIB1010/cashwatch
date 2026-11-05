@@ -42,6 +42,7 @@ function draw() {
     sourcesSection('bank'),
     sourcesSection('card'),
     notificationsSection(),
+    updatesSection(),
     securitySection(),
     apiSection(),
     generalSection(),
@@ -329,6 +330,45 @@ function notificationsSection() {
 async function refreshState() { S = await api('/api/settings'); }
 
 // ---------------------------------------------------------------- כללי
+// ---------------------------------------------------------------- עדכונים
+function updatesSection() {
+  const box = h('section', { class: 'card' }, h('h3', {}, 'עדכונים'), h('p', { class: 'muted small' }, 'טוען…'));
+  const render = (u) => {
+    const info = u.info;
+    const msg = h('span', { class: 'small' });
+    const say = (ok, t) => { msg.className = ok ? 'small ok' : 'small err'; msg.textContent = t; };
+    const check = h('button', { class: 'btn', onclick: async () => { say(true, 'בודק…'); try { render(await api('/api/update/check', { method: 'POST', body: '{}' })); } catch (e) { say(false, e.message); } } }, 'בדוק עכשיו');
+    const auto = h('input', { type: 'checkbox', checked: u.autoCheck, onchange: async (e) => { try { await api('/api/update/settings', { method: 'PUT', body: JSON.stringify({ autoCheck: e.target.checked }) }); } catch (er) { say(false, er.message); } } });
+    const poll = async () => {
+      try {
+        const v = await api('/api/update');
+        if (v.apply.state === 'error') return say(false, v.apply.message || 'העדכון נכשל');
+        say(true, v.apply.message || 'מתעדכן…');
+        setTimeout(poll, 2500);
+      } catch { say(true, 'התוכנה מתעדכנת ותיפתח מחדש בעוד רגע…'); setTimeout(() => location.reload(), 25000); }
+    };
+    const install = h('button', { class: 'btn primary', onclick: async () => {
+      if (!confirm('לעדכן עכשיו? התוכנה תיסגר ותיפתח מחדש. ההגדרות, הנתונים והסיסמאות נשמרים.')) return;
+      try { await api('/api/update/apply', { method: 'POST', body: '{}' }); poll(); } catch (e) { say(false, e.message); }
+    } }, `עדכן ל-${info?.latest ?? ''}`);
+    box.replaceChildren(h('h3', {}, 'עדכונים'),
+      h('p', { class: 'small' }, `הגרסה שלך: ${u.current}`, info?.checkedAt ? h('span', { class: 'muted' }, ` · נבדק ${ago(info.checkedAt)}`) : null),
+      info?.available
+        ? h('div', { class: 'alert warn', style: 'flex-direction:column;align-items:flex-start' },
+            h('b', {}, `גרסה ${info.latest} זמינה`),
+            info.notes ? h('pre', { class: 'small', style: 'white-space:pre-wrap;max-height:160px;overflow:auto;margin:0' }, info.notes) : null,
+            u.canAutoInstall ? install : h('a', { class: 'btn primary', href: info.releaseUrl, target: '_blank', rel: 'noopener' }, 'הורד מדף ה-Release'),
+            u.canAutoInstall ? null : h('span', { class: 'small muted' }, 'עדכון אוטומטי זמין בהתקנה מקובץ ההתקנה של Windows. כאן – הורד והתקן ידנית (הנתונים נשמרים בתיקיית data).'))
+        : info && !info.error ? h('p', { class: 'small ok' }, '✅ אתה על הגרסה העדכנית') : null,
+      info?.error ? h('p', { class: 'small muted' }, `בדיקת העדכון לא הצליחה: ${info.error}`) : null,
+      h('div', { class: 'row', style: 'gap:10px;align-items:center;flex-wrap:wrap' }, check,
+        h('label', { class: 'check' }, auto, h('span', {}, 'בדוק גרסה חדשה אוטומטית פעם ביום (פנייה ל-GitHub בלבד, בלי שליחת נתונים אישיים)'))),
+      msg);
+  };
+  api('/api/update').then(render).catch(() => {});
+  return box;
+}
+
 // ---------------------------------------------------------------- אבטחה
 function securitySection() {
   const sec = S.security;

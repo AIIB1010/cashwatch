@@ -13,6 +13,7 @@ import { registerSettingsApi } from './settingsApi.ts';
 import { withHint } from './scrape/types.ts';
 import { getLogo, removeLogo, saveCustomLogo } from './logos.ts';
 import { apiV1Router } from './apiV1.ts';
+import { cacheUpdate, canAutoInstall, checkForUpdate, downloadInstaller, launchUpdater, projectRootDir, readCachedUpdate, REPO_RE, type UpdateInfo } from './update.ts';
 import { cleanupIssuerItems, detectAndFile, explainDetection } from './patterns.ts';
 
 export { APP_VERSION } from './version.ts';
@@ -97,6 +98,7 @@ export function createApp(ctx: AppContext, hooks: { onScheduleChange?: () => voi
     res.json({
       version: APP_VERSION,
       locked: !!ctx.settings?.locked,
+      update: (() => { const u = readCachedUpdate(ctx.store); return u?.available ? { latest: u.latest, releaseUrl: u.releaseUrl ?? null } : null; })(),
       detection: explainDetection(ctx),
       now: (ctx.nowFn?.() ?? new Date()).toISOString(),
       today: analysis.today,
@@ -124,9 +126,10 @@ export function createApp(ctx: AppContext, hooks: { onScheduleChange?: () => voi
     if (item.match) { try { new RegExp(item.match, 'i'); } catch { /* יטופל כטקסט רגיל */ } }
     return item;
   };
-  const handle = (fn: (req: Request, res: Response) => void) => (req: Request, res: Response) => {
-    try { fn(req, res); }
+  const handle = (fn: (req: Request, res: Response) => void | Promise<void>) => async (req: Request, res: Response) => {
+    try { await fn(req, res); }
     catch (e) {
+      if (res.headersSent) return;
       if (e instanceof z.ZodError) return void res.status(400).json({ error: e.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') });
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -174,6 +177,43 @@ export function createApp(ctx: AppContext, hooks: { onScheduleChange?: () => voi
     removeLogo(path.join(ctx.dataDir, 'logos'), provider);
     res.json({ ok: true });
   });
+
+  // ---------- עדכון גרסה מ-GitHub ----------
+  let applyState: { state: 'idle' | 'downloading' | 'installing' | 'error'; message?: string } = { state: 'idle' };
+  const updateView = () => ({
+    current: APP_VERSION, autoCheck: ctx.config.update.autoCheck, repo: ctx.config.update.repo, canAutoInstall: canAutoInstall(),
+    info: readCachedUpdate(ctx.store), apply: applyState,
+  });
+  const doCheck = async (): Promise<UpdateInfo> => { const info = await checkForUpdate(ctx.config.update.repo, APP_VERSION); cacheUpdate(ctx.store, info); return info; };
+  app.get('/api/update', (_req, res) => { res.json(updateView()); });
+  app.post('/api/update/check', handle(async (_req, res) => { await doCheck(); res.json(updateView()); }));
+  app.put('/api/update/settings', handle((req, res) => {
+    if (!ctx.settings) return void res.status(400).json({ error: 'לא רלוונטי במצב הזה' });
+    const b = z.object({ autoCheck: z.boolean().optional(), repo: z.string().regex(REPO_RE, 'פורמט: owner/repo').optional() }).parse(req.body);
+    ctx.settings.updateConfig((c) => { if (b.autoCheck !== undefined) c.update.autoCheck = b.autoCheck; if (b.repo) c.update.repo = b.repo; });
+    res.json(updateView());
+  }));
+  app.post('/api/update/apply', handle(async (_req, res) => {
+    if (!canAutoInstall()) return void res.status(400).json({ error: 'עדכון אוטומטי זמין רק בהתקנה מקובץ ההתקנה של Windows. הורד את הגרסה החדשה מדף ה-Release.' });
+    if (applyState.state === 'downloading' || applyState.state === 'installing') return void res.status(409).json({ error: 'עדכון כבר מתבצע' });
+    if (isRunning()) return void res.status(409).json({ error: 'מתבצע איסוף נתונים כרגע. נסה שוב בעוד כמה דקות.' });
+    const info = await doCheck();
+    if (!info.available) return void res.status(400).json({ error: info.error ?? 'אין גרסה חדשה' });
+    applyState = { state: 'downloading', message: `מוריד את ${info.latest}…` };
+    res.status(202).json(updateView());
+    void (async () => {
+      try {
+        const file = await downloadInstaller(info, path.join(ctx.dataDir, 'updates'));
+        applyState = { state: 'installing', message: 'מתקין… התוכנה תיסגר ותיפתח מחדש (נתונים והגדרות נשמרים)' };
+        ctx.log(`⬆️ מעדכן ל-${info.latest}`);
+        launchUpdater(file, projectRootDir());
+        setTimeout(() => process.exit(0), 1500);
+      } catch (e) {
+        applyState = { state: 'error', message: e instanceof Error ? e.message : String(e) };
+        ctx.log(`❌ העדכון נכשל: ${applyState.message}`);
+      }
+    })();
+  }));
 
   // פתיחת נעילת הסיסמה (פעם אחת אחרי הפעלת המחשב). האטה קלה בניסיון כושל מקשה על ניחושים דרך הממשק
   let failedUnlocks = 0;
@@ -259,9 +299,25 @@ export function startServer(ctx: AppContext): { close: () => void } {
       ctx.log(`בדיקה מתוזמנת נכשלה: ${e instanceof Error ? e.message : e}`);
     }
   };
+  // בדיקת גרסה חדשה: פעם ביום (אפשר לכבות בהגדרות); התראת מסך פעם אחת לכל גרסה
+  const updateTick = async () => {
+    try {
+      if (!ctx.config.update.autoCheck) return;
+      const last = readCachedUpdate(ctx.store)?.checkedAt;
+      if (last && Date.now() - new Date(last).getTime() < 23 * 3600_000) return;
+      const info = await checkForUpdate(ctx.config.update.repo, APP_VERSION);
+      cacheUpdate(ctx.store, info);
+      if (info.available && ctx.store.getKv('update_notified') !== info.latest) {
+        ctx.store.setKv('update_notified', info.latest ?? '');
+        void import('./notify/desktop.ts').then((m) => m.sendDesktopNotification('CashWatch: יש גרסה חדשה', `גרסה ${info.latest} זמינה. היכנס להגדרות ← עדכונים כדי לעדכן.`)).catch(() => {});
+      }
+    } catch { /* לא קריטי */ }
+  };
+  const updFirst = process.env.CASHWATCH_NO_CATCHUP ? null : setTimeout(updateTick, 3 * 60_000);
+  const updEvery = process.env.CASHWATCH_NO_CATCHUP ? null : setInterval(updateTick, 6 * 3600_000);
   const disabled = !!process.env.CASHWATCH_NO_CATCHUP;
   const first = disabled ? null : setTimeout(tick, 90_000); // מחכים דקה וחצי אחרי עליית המחשב/הרשת
   const every = disabled ? null : setInterval(tick, 5 * 60_000);
   ctx.log(ctx.config.schedule.mode === 'auto' ? '⏰ מצב אוטומטי: בדיקה אחת ביום, ברגע שהמחשב דלוק' : `⏰ בדיקה בשעות קבועות: ${ctx.config.schedule.times.join(', ')} (ואם המחשב היה כבוי – ברגע שיידלק)`);
-  return { close: () => { if (first) clearTimeout(first); if (every) clearInterval(every); server.close(); } };
+  return { close: () => { if (first) clearTimeout(first); if (every) clearInterval(every); if (updFirst) clearTimeout(updFirst); if (updEvery) clearInterval(updEvery); server.close(); } };
 }

@@ -56,6 +56,9 @@ function updateChrome() {
   $('runInfo').textContent = !state.running ? '' : prog?.canceling ? 'מבטל…' : active ? `${active.label}: ${active.message ?? ''}` : doneItems.length ? doneItems.map((i) => `${i.label}: ${i.message ?? ''}`).join(' · ') : 'מתחיל…';
   $('cancelBtn2').hidden = !state.running || !!prog?.canceling;
   $('version').textContent = state.version ? `גרסה ${state.version}` : '';
+  const ul = $('updateLink');
+  ul.hidden = !state.update;
+  if (state.update) ul.textContent = `⬆ גרסה ${state.update.latest} זמינה`;
   const badge = $('bellBadge');
   badge.hidden = alerts.length === 0;
   badge.textContent = String(alerts.length);
