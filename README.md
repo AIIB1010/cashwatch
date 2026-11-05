@@ -94,7 +94,7 @@ npm test               # בדיקות
 
 ## רישיון ורכיבי צד שלישי
 
-- **רישיון CashWatch:** יוגדר על ידי הבעלים. (עד אז אין לראות בקוד כמופץ ברישיון כלשהו.)
+- **רישיון CashWatch:** MIT (ראה קובץ `LICENSE`). רכיבי צד שלישי ברישיונות שלהם – ראה `THIRD_PARTY_NOTICES.md`. (עד אז אין לראות בקוד כמופץ ברישיון כלשהו.)
 - **רכיבי צד שלישי:** התוכנה משתמשת בספריית הקוד הפתוח [`israeli-bank-scrapers`](https://github.com/eshaham/israeli-bank-scrapers) (רישיון MIT, © Elad Shaham) ובעוד ספריות וגופן Heebo (SIL OFL 1.1). טקסטי הרישיונות המלאים והודעות הזכויות ב-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## תיעוד לפיתוח

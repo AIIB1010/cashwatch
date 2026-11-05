@@ -2,6 +2,7 @@
   "name": "cashwatch",
   "version": "1.3.0",
   "private": true,
+  "license": "MIT",
   "description": "מעקב תזרים יומי לחשבונות בנק וכרטיסי אשראי בישראל, עם התראות בוואטסאפ/מייל ודשבורד",
   "type": "module",
   "engines": {
