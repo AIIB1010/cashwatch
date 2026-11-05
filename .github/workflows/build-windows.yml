@@ -30,6 +30,12 @@ jobs:
           Invoke-WebRequest "https://nodejs.org/dist/v$nv/node-v$nv-win-x64.zip" -OutFile node.zip
           Expand-Archive node.zip -DestinationPath node-dist
           node scripts/stage-windows.mjs "node-dist/node-v$nv-win-x64/node.exe"
+      - name: בדיקת עשן לחבילה (טעינת הספריות עם ה-Node המובנה)
+        shell: pwsh
+        working-directory: build/stage
+        run: |
+          .\runtime\node.exe --import tsx --eval "await import('israeli-bank-scrapers'); await import('puppeteer'); await import('./src/server.ts'); await import('./src/mcp.ts'); console.log('smoke ok')"
+          if ($LASTEXITCODE -ne 0) { throw 'smoke test failed' }
       - name: Inno Setup
         shell: pwsh
         run: |

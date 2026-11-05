@@ -426,10 +426,11 @@ const TRANSIENT_ERRORS = /^(TIMEOUT|NETWORK|GENERAL_ERROR|GENERIC|SESSION_CONFLI
  * כשל איסוף חולף (איטיות/רשת/התנגשות התחברות) לא מקפיץ התראה אם הייתה הצלחה בתוך `transientGraceHours`:
  * המערכת ממשיכה לנסות לבד. שגיאות פרטי כניסה והצלחה ישנה מדי – כן מתריעות.
  */
-export function sourceFindings(rows: SourceStatusRow[], now: Date, staleHours: number, transientGraceHours = 24): Finding[] {
+export function sourceFindings(rows: SourceStatusRow[], now: Date, staleHours: number, transientGraceHours = 24, failStreak: Map<string, number> = new Map()): Finding[] {
   const out: Finding[] = [];
   for (const r of rows) {
-    if (r.lastError && TRANSIENT_ERRORS.test(r.lastError) && r.lastSuccessAt && now.getTime() - new Date(r.lastSuccessAt).getTime() < transientGraceHours * 3_600_000) continue;
+    // כשל חולף לא מתריע בתוך חלון ההמתנה – אלא אם הוא חוזר 3 פעמים ברציפות (אז זו לא תקלה חולפת)
+    if (r.lastError && TRANSIENT_ERRORS.test(r.lastError) && (failStreak.get(r.sourceId) ?? 0) < 3 && r.lastSuccessAt && now.getTime() - new Date(r.lastSuccessAt).getTime() < transientGraceHours * 3_600_000) continue;
     if (r.lastError && r.lastAttemptAt && (!r.lastSuccessAt || r.lastAttemptAt > r.lastSuccessAt)) {
       out.push({
         key: `scrape-failed:${r.sourceId}`,

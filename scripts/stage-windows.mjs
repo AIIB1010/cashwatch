@@ -10,8 +10,15 @@ const stage = path.join(root, 'build', 'stage');
 fs.rmSync(stage, { recursive: true, force: true });
 fs.mkdirSync(stage, { recursive: true });
 
-const copy = (rel) => fs.cpSync(path.join(root, rel), path.join(stage, rel), { recursive: true, filter: (src) => !/[\\/](data|build|\.git)([\\/]|$)/.test(src.slice(root.length)) });
-for (const rel of ['src', 'web', 'windows', 'node_modules', 'package.json', 'package-lock.json', 'tsconfig.json', 'README.md']) copy(rel);
+// מדלגים על data/build/.git רק ברמה העליונה של הפרויקט. (בעבר סיננו כל תיקייה בשם build גם בתוך node_modules,
+// וזה שבר חבילות כמו lines-and-columns שהקוד שלהן בתיקיית build.)
+const TOP_SKIP = new Set(['data', 'build', '.git']);
+const copy = (rel) => fs.cpSync(path.join(root, rel), path.join(stage, rel), { recursive: true, filter: (src) => !TOP_SKIP.has(path.relative(root, src).split(path.sep)[0]) || path.relative(root, src) === rel && !TOP_SKIP.has(rel) });
+for (const rel of ['src', 'web', 'windows', 'node_modules', 'package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) if (fs.existsSync(path.join(root, rel))) copy(rel);
+// ודאות שלמות: מספר הקבצים ב-node_modules של החבילה זהה למקור (אחרת חסרים קבצים והתוכנה תישבר בזמן ריצה)
+const countFiles = (dir) => { let n = 0; for (const e of fs.readdirSync(dir, { withFileTypes: true })) n += e.isDirectory() ? countFiles(path.join(dir, e.name)) : 1; return n; };
+const a = countFiles(path.join(root, 'node_modules')), b = countFiles(path.join(stage, 'node_modules'));
+if (a !== b) { console.error(`node_modules בחבילה לא שלם: ${b} קבצים מתוך ${a}`); process.exit(1); }
 fs.mkdirSync(path.join(stage, 'runtime'), { recursive: true });
 fs.copyFileSync(nodeExe, path.join(stage, 'runtime', 'node.exe'));
 // ודאות: אין סודות/נתונים בחבילה

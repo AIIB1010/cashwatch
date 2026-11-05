@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { applyLibraryPatches } from './patches.ts';
 import { interactiveLogin } from './interactive.ts';
-import { clearProfileLocks, LOGIN_URLS, resolveBrowserPath } from './profile.ts';
+import { clearProfileLocks, LOGIN_URLS, pruneProfileCaches, resolveBrowserPath } from './profile.ts';
 import { localDate } from '../engine/dates.ts';
 import type { ScrapeOutcome, ScrapeProvider, ScrapeRequest, ScrapedAccount } from './types.ts';
 
@@ -58,11 +58,15 @@ export class RealScrapeProvider implements ScrapeProvider {
     } finally {
       req.signal?.removeEventListener('abort', kill);
       await browser.close().catch(() => {});
+      try { pruneProfileCaches(req.profileDir); } catch { /* לא קריטי */ }
     }
     if (!result.success) {
       const msg = result.errorMessage ?? '';
       if ((globalThis as { __cashwatchLoggedOut?: boolean }).__cashwatchLoggedOut) {
         return { ok: false, errorType: 'SESSION_CONFLICT', errorMessage: 'הבנק הציג דף יציאה (התחברות אחרת פתוחה)' };
+      }
+      if (/Cannot find module|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND/i.test(msg)) {
+        return { ok: false, errorType: 'INTERNAL', errorMessage: `תקלה בהתקנת התוכנה (חסר קובץ): ${msg.slice(0, 160)}` };
       }
       if (/CASHWATCH_BAD_CREDENTIALS/.test(msg)) {
         return { ok: false, errorType: 'INVALID_PASSWORD', errorMessage: 'האתר הציג שהפרטים שגויים' };

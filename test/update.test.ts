@@ -56,3 +56,24 @@ test('עדכון אוטומטי זמין רק בהתקנה עם Node מובנה 
   assert.equal(canAutoInstall(root, 'win32'), true);
   assert.equal(canAutoInstall(root, 'linux'), false);
 });
+
+test('ניקוי מטמוני פרופיל: מוחק רק תיקיות מטמון מוכרות, לא עוגיות/אחסון/העדפות', async () => {
+  const { pruneProfileCaches } = await import('../src/scrape/profile.ts');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-prof-'));
+  const mk = (rel: string, size = 1000) => { const f = path.join(dir, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, Buffer.alloc(size, 1)); };
+  mk('Default/Cache/data_0', 5000); mk('Default/Code Cache/js/a', 3000); mk('optimization_guide_model_store/m', 7000); mk('Default/Service Worker/CacheStorage/x', 2000);
+  mk('Default/Network/Cookies'); mk('Default/Local Storage/leveldb/1'); mk('Local State'); mk('Default/Preferences'); mk('Default/Service Worker/Database/y');
+  const freed = pruneProfileCaches(dir);
+  assert.ok(freed >= 17000);
+  for (const keep of ['Default/Network/Cookies', 'Default/Local Storage/leveldb/1', 'Local State', 'Default/Preferences', 'Default/Service Worker/Database/y']) assert.ok(fs.existsSync(path.join(dir, keep)), keep);
+  for (const gone of ['Default/Cache', 'Default/Code Cache', 'optimization_guide_model_store', 'Default/Service Worker/CacheStorage']) assert.ok(!fs.existsSync(path.join(dir, gone)), gone);
+});
+
+test('כשל אחרי כשל: 3 כשלונות חולפים ברציפות מתריעים גם בתוך חלון ההמתנה; שגיאת INTERNAL מתריעה מיד', async () => {
+  const { sourceFindings } = await import('../src/engine/analyze.ts');
+  const now = new Date('2026-11-05T12:00:00Z');
+  const row = (err: string) => ({ sourceId: 's', label: 'פועלים', lastAttemptAt: '2026-11-05T11:00:00Z', lastSuccessAt: '2026-11-05T05:00:00Z', lastError: err, lastDurationMs: 1 });
+  assert.equal(sourceFindings([row('TIMEOUT: x')], now, 36, 24, new Map([['s', 1]])).length, 0, 'כשל חולף בודד – שקט');
+  assert.equal(sourceFindings([row('TIMEOUT: x')], now, 36, 24, new Map([['s', 3]])).length, 1, 'שלושה ברצף – מתריע');
+  assert.equal(sourceFindings([row('INTERNAL: חסר קובץ')], now, 36, 24, new Map([['s', 1]])).length, 1, 'תקלת התקנה – מיד');
+});

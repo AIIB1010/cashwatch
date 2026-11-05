@@ -33,7 +33,7 @@ export interface ScrapeProvider {
 }
 
 /** שגיאות שאסור לנסות שוב אוטומטית – ניסיון חוזר עלול לנעול את החשבון */
-export const NO_RETRY_ERRORS = new Set(['INVALID_PASSWORD', 'CHANGE_PASSWORD', 'ACCOUNT_BLOCKED', 'TWO_FACTOR_RETRIEVER_MISSING']);
+export const NO_RETRY_ERRORS = new Set(['INTERNAL', 'INVALID_PASSWORD', 'CHANGE_PASSWORD', 'ACCOUNT_BLOCKED', 'TWO_FACTOR_RETRIEVER_MISSING']);
 
 export const ERROR_HINTS: Record<string, string> = {
   INVALID_PASSWORD: 'הבנק דחה את הכניסה. אם אתה בטוח שהפרטים נכונים (ואתה נכנס ידנית בהצלחה), ייתכן שהאתר השתנה: לחץ "צילום מסך של הכישלון" בהגדרות כדי לראות מה קרה. אחרת, פתח "עריכה" והקלד מחדש את הפרטים. (לא מנסים שוב אוטומטית כדי לא לנעול את החשבון.)',
@@ -44,6 +44,7 @@ export const ERROR_HINTS: Record<string, string> = {
   SESSION_CONFLICT: 'הבנק ניתק אותנו כי כבר הייתה התחברות פתוחה לחשבון (למשל כניסה ידנית שלך או ריצה קודמת שנגמרה לא מזמן). זו לא בעיית סיסמה. נסה שוב בעוד כמה דקות, ובכניסה ידנית תמיד לחץ "יציאה" באתר לפני שאתה סוגר את החלון.',
   NETWORK: 'אין גישה לאתר מהמחשב/השרת הזה. בדוק אינטרנט, ושההרצה היא מכתובת IP ישראלית (בנקים חוסמים IP מחו״ל ושרתי ענן; VPN/ענן זר ייחסם).',
   GENERIC: 'שגיאה כללית באתר. ייתכן שהאתר השתנה או חוסם את הגישה האוטומטית.',
+  INTERNAL: 'תקלה בהתקנת התוכנה עצמה (לא באתר הבנק): חסר קובץ. התקן מחדש את הגרסה העדכנית (או כתוב למפתח).',
   GENERAL_ERROR: 'שגיאה כללית. ייתכן שהאתר השתנה, או שיש חסימת אבטחה (WAF/גאו-IP).',
 };
 

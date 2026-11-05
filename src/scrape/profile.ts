@@ -42,3 +42,33 @@ export async function resolveBrowserPath(): Promise<string | undefined> {
   } catch { /* ממשיכים לחיפוש */ }
   return SYSTEM_BROWSERS.find((p) => fs.existsSync(p));
 }
+
+/**
+ * פרופיל הדפדפן (המכשיר המהימן) יכול להתנפח למאות מגה בגלל מטמונים, מודלים ורכיבים שכרום מוריד.
+ * מוחקים אך ורק תיקיות מטמון מוכרות (רשימה סגורה) בתוך תיקיית הפרופיל – לא עוגיות, לא Local Storage ולא העדפות.
+ * מחזיר כמה בייטים שוחררו (בקירוב).
+ */
+export const PROFILE_CACHE_DIRS = [
+  'Cache', 'Code Cache', 'GPUCache', 'GrShaderCache', 'ShaderCache', 'DawnCache', 'DawnGraphiteCache', 'DawnWebGPUCache',
+  'component_crx_cache', 'extensions_crx_cache', 'optimization_guide_model_store', 'OptGuideOnDeviceModel', 'screen_ai',
+  'Service Worker/CacheStorage', 'Service Worker/ScriptCache', 'Safe Browsing', 'Subresource Filter', 'segmentation_platform',
+  'Default/Cache', 'Default/Code Cache', 'Default/GPUCache', 'Default/DawnGraphiteCache', 'Default/DawnWebGPUCache',
+  'Default/Service Worker/CacheStorage', 'Default/Service Worker/ScriptCache', 'Default/optimization_guide_prediction_model_downloads',
+];
+
+const dirSize = (d: string): number => {
+  let n = 0;
+  try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); n += e.isDirectory() ? dirSize(f) : fs.statSync(f).size; } } catch { /* ignore */ }
+  return n;
+};
+
+export function pruneProfileCaches(profileDir: string): number {
+  const root = path.resolve(profileDir);
+  let freed = 0;
+  for (const rel of PROFILE_CACHE_DIRS) {
+    const target = path.resolve(root, rel);
+    if (!target.startsWith(root + path.sep)) continue; // הגנה: רק בתוך הפרופיל
+    try { if (!fs.existsSync(target)) continue; freed += dirSize(target); fs.rmSync(target, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+  return freed;
+}

@@ -72,7 +72,10 @@ export function computeAnalysis(ctx: AppContext): { analysis: Analysis; findings
     ...status,
     ...missing.map((id) => ({ sourceId: id, label: labels.get(id)!, lastAttemptAt: null, lastSuccessAt: null, lastError: null, lastDurationMs: null })),
   ];
-  const findings = [...sourceFindings(rows, now, config.scraping.staleAfterHours), ...analysis.findings];
+  // כמה כשלונות רצופים אחרונים לכל מקור (לפי יומן הניסיונות)
+  const failStreak = new Map<string, number>();
+  for (const r of rows) { let n = 0; for (const a of store.recentAttempts(r.sourceId, 8).reverse()) { if (a.ok) break; n++; } failStreak.set(r.sourceId, n); }
+  const findings = [...sourceFindings(rows, now, config.scraping.staleAfterHours, 24, failStreak), ...analysis.findings];
   const rank = { critical: 0, warning: 1, info: 2 } as const;
   findings.sort((a, b) => rank[a.severity] - rank[b.severity]);
   return { analysis, findings };
