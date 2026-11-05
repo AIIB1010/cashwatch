@@ -34,9 +34,10 @@ const csvCell = (v: unknown, text = false): string => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 export function txnsToCsv(txns: Txn[], labels: Map<string, string>): string {
-  const head = ['id', 'source_id', 'source', 'account', 'date', 'processed_date', 'amount', 'description', 'memo', 'status'];
-  const rows = txns.map((t) => [t.id, t.sourceId, labels.get(t.sourceId) ?? '', t.accountRef, t.date, t.processedDate, t.amount, t.description, t.memo, t.status]
-    .map((v, i) => csvCell(v, i === 2 || i === 7 || i === 8)).join(','));
+  const head = ['id', 'source_id', 'source', 'account', 'date', 'processed_date', 'amount', 'description', 'memo', 'status', 'original_amount', 'original_currency', 'installment_no', 'installment_total', 'category', 'identifier', 'type'];
+  const textCols = new Set([2, 7, 8, 14, 15]);
+  const rows = txns.map((t) => [t.id, t.sourceId, labels.get(t.sourceId) ?? '', t.accountRef, t.date, t.processedDate, t.amount, t.description, t.memo, t.status, t.originalAmount, t.originalCurrency, t.installmentNo, t.installmentTotal, t.category, t.identifier, t.txnType]
+    .map((v, i) => csvCell(v, textCols.has(i))).join(','));
   return `﻿${[head.join(','), ...rows].join('\r\n')}\r\n`;
 }
 

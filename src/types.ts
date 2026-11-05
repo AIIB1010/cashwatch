@@ -13,6 +13,14 @@ export interface Txn {
   description: string;
   memo: string;
   status: 'completed' | 'pending';
+  /** פרטים נוספים שהבנק/חברת האשראי מספקים (אם יש) – לשימוש ה-API (סכום מקורי/מט"ח, תשלומים, קטגוריה, מזהה) */
+  originalAmount?: number | null;
+  originalCurrency?: string | null;
+  installmentNo?: number | null;
+  installmentTotal?: number | null;
+  category?: string | null;
+  identifier?: string | null;
+  txnType?: string | null;
 }
 
 export type RecurringKind = 'expense' | 'income';

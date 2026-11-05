@@ -59,6 +59,7 @@ const generalBody = z.object({
   alerts: z.object({ reminderHours: z.number().min(1).max(168), okDigest: z.enum(['never', 'weekly', 'daily']) }).optional(),
   publicUrl: z.string().max(200).nullable().optional(),
   autoDetect: z.boolean().optional(),
+  historyDays: z.number().int().min(60).max(730).optional(),
   timezone: z.string().refine((tz) => { try { new Intl.DateTimeFormat('en', { timeZone: tz }); return true; } catch { return false; } }, 'אזור זמן לא תקין').optional(),
 });
 
@@ -115,7 +116,7 @@ export function registerSettingsApi(app: express.Express, ctx: AppContext, hooks
     const n = c.notifications;
     return {
       providers: PROVIDERS,
-      general: { timezone: c.timezone, schedule: { mode: c.schedule.mode, times: c.schedule.times }, horizonDays: c.horizonDays, alerts: c.alerts, publicUrl: c.dashboard.publicUrl ?? null, autoDetect: c.recurring.autoDetect },
+      general: { timezone: c.timezone, schedule: { mode: c.schedule.mode, times: c.schedule.times }, horizonDays: c.horizonDays, alerts: c.alerts, publicUrl: c.dashboard.publicUrl ?? null, autoDetect: c.recurring.autoDetect, historyDays: c.scraping.historyDays },
       sources: [
         ...c.banks.map((b) => src('bank', b, { alertBelow: b.alertBelow, overdraftLimit: b.overdraftLimit })),
         ...c.cards.map((k) => src('card', k, { fundingAccount: k.fundingAccount, billingDay: k.billingDay ?? null, chargeMatch: k.chargeMatch ?? null, cardOverrides: k.cardOverrides, detectedCards: ctx.store.listCardRefs(k.id) })),
@@ -350,6 +351,7 @@ export function registerSettingsApi(app: express.Express, ctx: AppContext, hooks
       if (b.timezone) c.timezone = b.timezone;
       if (b.publicUrl !== undefined) c.dashboard.publicUrl = b.publicUrl || undefined;
       if (b.autoDetect !== undefined) c.recurring.autoDetect = b.autoDetect;
+      if (b.historyDays) c.scraping.historyDays = b.historyDays;
     });
     hooks.onScheduleChange?.();
     res.json({ ok: true });

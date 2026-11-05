@@ -52,6 +52,10 @@ export class Store {
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     this.db.exec(SCHEMA);
     const cols = (this.db.prepare('PRAGMA table_info(recurring)').all() as Array<{ name: string }>).map((c) => c.name);
+    const tcols = (this.db.prepare('PRAGMA table_info(txns)').all() as Array<{ name: string }>).map((c) => c.name);
+    for (const [c, def] of [['original_amount', 'REAL'], ['original_currency', 'TEXT'], ['installment_no', 'INTEGER'], ['installment_total', 'INTEGER'], ['category', 'TEXT'], ['identifier', 'TEXT'], ['txn_type', 'TEXT']] as const) {
+      if (!tcols.includes(c)) this.db.exec(`ALTER TABLE txns ADD COLUMN ${c} ${def}`);
+    }
     for (const [c, def] of [['auto', 'INTEGER NOT NULL DEFAULT 0'], ['auto_key', 'TEXT'], ['reviewed', 'INTEGER NOT NULL DEFAULT 1']] as const) {
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE recurring ADD COLUMN ${c} ${def}`);
     }
@@ -96,8 +100,8 @@ export class Store {
     this.db.exec('BEGIN');
     try {
       this.db.prepare("DELETE FROM txns WHERE source_id=? AND (date>=? OR processed_date>=? OR status='pending')").run(sourceId, since, since);
-      const ins = this.db.prepare('INSERT OR REPLACE INTO txns(id,source_id,kind,account_ref,date,processed_date,amount,description,memo,status) VALUES(?,?,?,?,?,?,?,?,?,?)');
-      for (const r of rows) ins.run(r.id, sourceId, kind, r.accountRef, r.date, r.processedDate, r.amount, r.description, r.memo, r.status);
+      const ins = this.db.prepare('INSERT OR REPLACE INTO txns(id,source_id,kind,account_ref,date,processed_date,amount,description,memo,status,original_amount,original_currency,installment_no,installment_total,category,identifier,txn_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+      for (const r of rows) ins.run(r.id, sourceId, kind, r.accountRef, r.date, r.processedDate, r.amount, r.description, r.memo, r.status, r.originalAmount ?? null, r.originalCurrency ?? null, r.installmentNo ?? null, r.installmentTotal ?? null, r.category ?? null, r.identifier ?? null, r.txnType ?? null);
       this.db.exec('COMMIT');
     } catch (e) {
       this.db.exec('ROLLBACK');
@@ -131,6 +135,9 @@ export class Store {
       id: r.id as string, sourceId: r.source_id as string, accountRef: r.account_ref as string,
       date: r.date as string, processedDate: r.processed_date as string, amount: r.amount as number,
       description: (r.description as string) ?? '', memo: (r.memo as string) ?? '', status: r.status as 'completed' | 'pending',
+      originalAmount: (r.original_amount as number | null) ?? null, originalCurrency: (r.original_currency as string | null) ?? null,
+      installmentNo: (r.installment_no as number | null) ?? null, installmentTotal: (r.installment_total as number | null) ?? null,
+      category: (r.category as string | null) ?? null, identifier: (r.identifier as string | null) ?? null, txnType: (r.txn_type as string | null) ?? null,
     }));
   }
 

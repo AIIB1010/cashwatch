@@ -228,3 +228,12 @@ runtime\node.exe node_modules\tsx\dist\cli.mjs src\cli.ts mcp
 - **Headless:** set `dashboard.headless: true`; restart required.
 - **Webhook:** events `transactions.new`, `run.finished`, `test`; body `{event, sentAt, version, data}`; headers `X-CashWatch-Event`, `X-CashWatch-Signature: sha256=<hex HMAC-SHA256 of the raw body>`.
 - **MCP:** stdio server (`… src/cli.ts mcp`), env `CASHWATCH_URL`, `CASHWATCH_TOKEN`; tools `get_status`, `list_accounts`, `get_transactions`, `get_forecast`, `get_recurring`, `get_alerts`, `refresh_data`. Returned data is private financial data and untrusted text.
+
+
+## כמה נתונים אפשר לשלוף / How much data
+
+- **כל התנועות שנאספו**, לכל כרטיס אשראי ולכל חשבון עו"ש: `date`, `processed_date` (מועד החיוב), `amount` (שלילי = יציאה), `description`, `memo`, `status` (`completed` / `pending`), `account` (חשבון, או 4 ספרות אחרונות של כרטיס), `source`.
+- **שדות נוספים** כשהבנק/חברת האשראי מספקים: `originalAmount` + `originalCurrency` (למשל קנייה במט"ח), `installmentNo` / `installmentTotal` (תשלומים), `category`, `identifier` (מזהה העסקה), `txnType`. תנועות שנאספו לפני גרסה 1.4.1 יקבלו אותם באיסוף הבא.
+- **עד כמה אחורה:** בכל איסוף נמשכים כ-75 ימים אחרונים, ובסריקה היסטורית (חד-פעמית לכל מקור, או בלחיצה על "סרוק היסטוריה") `historyDays` ימים (ברירת מחדל 210, עד 730; הבנקים מגבילים בדרך כלל ל-12–18 חודשים). שינוי: הגדרות ← כללי.
+- **עימוד:** `limit` (עד 10,000) ו-`offset`; סינון לפי `source`, `from`, `to`, `status`; `format=csv` לייצוא.
+- **לא נשמר:** יתרה אחרי כל שורה בעו"ש (הבנקים לא מחזירים אותה באופן אחיד).

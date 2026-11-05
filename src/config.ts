@@ -85,7 +85,7 @@ export const configSchema = z.object({
   scraping: z.object({
     fetchDaysBack: z.number().int().min(30).max(365).default(75),
     /** בסריקה הראשונה של מקור – כמה ימי היסטוריה למשוך (לזיהוי דפוסים חוזרים) */
-    historyDays: z.number().int().min(60).max(365).default(210),
+    historyDays: z.number().int().min(60).max(730).default(210),
     futureMonths: z.number().int().min(0).max(4).default(2),
     attempts: z.number().int().min(1).max(5).default(3),
     retryDelaySeconds: z.number().default(90),

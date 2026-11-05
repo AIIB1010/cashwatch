@@ -98,6 +98,13 @@ export class RealScrapeProvider implements ScrapeProvider {
           description: String(t.description ?? ''),
           memo: String(t.memo ?? ''),
           status: t.status === 'pending' ? 'pending' : 'completed',
+          originalAmount: Number.isFinite(t.originalAmount) ? Number(t.originalAmount) : null,
+          originalCurrency: t.originalCurrency ? String(t.originalCurrency) : null,
+          installmentNo: t.installments?.number ?? null,
+          installmentTotal: t.installments?.total ?? null,
+          category: t.category ? String(t.category) : null,
+          identifier: t.identifier !== undefined && t.identifier !== null ? String(t.identifier) : null,
+          txnType: t.type ? String(t.type) : null,
         } as const;
       }),
     }));

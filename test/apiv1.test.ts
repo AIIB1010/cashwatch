@@ -140,3 +140,23 @@ test('נעילה בסיסמה בשרת: state מדווח locked, עריכת הג
     assert.equal((await post('/api/settings/notifications', { desktop: { enabled: true } }, 'PUT')).status, 200);
   } finally { server.close(); store.close(); }
 });
+
+test('תנועות עם פרטים נוספים (מט"ח, תשלומים, קטגוריה, מזהה) נשמרות ומוחזרות ב-API וב-CSV; מסד ישן עובר מיגרציה', async () => {
+  // מסד בסכמה ישנה (בלי העמודות החדשות)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-mig-'));
+  const { DatabaseSync } = await import('node:sqlite');
+  const old = new DatabaseSync(path.join(dir, 'cashwatch.db'));
+  old.exec(`CREATE TABLE txns (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, kind TEXT NOT NULL, account_ref TEXT NOT NULL, date TEXT NOT NULL, processed_date TEXT NOT NULL, amount REAL NOT NULL, description TEXT, memo TEXT, status TEXT NOT NULL)`);
+  old.prepare('INSERT INTO txns VALUES (?,?,?,?,?,?,?,?,?,?)').run('x#1', 'c1', 'card', '4580', '2026-10-01', '2026-11-02', -50, 'ישן', '', 'completed');
+  old.close();
+  const { store } = openSettings({ dataDir: dir, configPath: path.join(dir, 'x.yaml'), secretsPath: path.join(dir, 'y.yaml') });
+  try {
+    assert.equal(store.queryTxns({})[0]!.description, 'ישן', 'שורה ישנה נשמרה');
+    store.replaceTxns('c1', 'card', '2026-01-01', [{ accountRef: '4580', date: '2026-10-05', processedDate: '2026-11-02', amount: -370.5, description: 'AMAZON', memo: '', status: 'completed', originalAmount: -100, originalCurrency: 'USD', installmentNo: 2, installmentTotal: 6, category: 'קניות', identifier: '123456', txnType: 'installments' }]);
+    const t = store.queryTxns({})[0]!;
+    assert.deepEqual([t.originalAmount, t.originalCurrency, t.installmentNo, t.installmentTotal, t.category, t.identifier, t.txnType], [-100, 'USD', 2, 6, 'קניות', '123456', 'installments']);
+    const csv = txnsToCsv([t], new Map([['c1', 'ישראכרט']]));
+    assert.ok(csv.split('\r\n')[0]!.includes('original_currency,installment_no'));
+    assert.ok(csv.includes('-100,USD,2,6,קניות,123456,installments'));
+  } finally { store.close(); }
+});

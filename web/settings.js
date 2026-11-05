@@ -465,6 +465,7 @@ function generalSection() {
   const digest = h('select', {}, [['daily', 'כל יום'], ['weekly', 'פעם בשבוע (ביום ראשון)'], ['never', 'רק כשיש התראה']].map(([v, t]) => h('option', { value: v, selected: g.alerts.okDigest === v }, t)));
   const url = inp({ value: g.publicUrl ?? '', placeholder: 'http://localhost:8080' });
   const autoDetect = h('input', { type: 'checkbox', checked: g.autoDetect });
+  const hist = inp({ type: 'number', min: 60, max: 730, value: g.historyDays ?? 210 });
   const msg = h('span', { class: 'small' });
   return h('section', {}, h('h3', {}, 'כללי'),
     h('div', { class: 'card' },
@@ -474,6 +475,7 @@ function generalSection() {
         field('כמה ימים קדימה לחשב', horizon),
         field('תזכורת חוזרת על התראה פתוחה (שעות)', reminder),
         field('עדכון קבוע גם כשהכול תקין', digest, 'סיכום יתרות והירידות הקרובות, כדי לדעת שהמערכת חיה'),
+        field('כמה ימי היסטוריה למשוך בסריקה היסטורית', hist, 'חד-פעמי לכל מקור, וגם בלחיצה על "סרוק היסטוריה". בנקים מגבילים בדרך כלל ל-12–18 חודשים. ככל שיותר – האיסוף הראשון ארוך יותר'),
         field('כתובת הדשבורד בהודעות (אופציונלי)', url),
         h('label', { class: 'switch wide' }, autoDetect, h('span', { class: 'slider' }), h('span', {}, 'זיהוי אוטומטי של הוצאות והכנסות קבועות מההיסטוריה'))),
       h('div', { class: 'dlg-actions' }, msg, h('span', { class: 'spacer' }),
@@ -481,7 +483,7 @@ function generalSection() {
           try {
             await api('/api/settings/general', { method: 'PUT', body: JSON.stringify({
               schedule: { mode: mode.value, ...(mode.value === 'fixed' ? { times: times.value.split(/[,\s]+/).filter(Boolean) } : {}) }, horizonDays: Number(horizon.value),
-              alerts: { reminderHours: Number(reminder.value), okDigest: digest.value }, publicUrl: url.value.trim() || null, autoDetect: autoDetect.checked }) });
+              alerts: { reminderHours: Number(reminder.value), okDigest: digest.value }, publicUrl: url.value.trim() || null, autoDetect: autoDetect.checked, historyDays: Number(hist.value || 210) }) });
             msg.className = 'small ok'; msg.textContent = '✅ נשמר';
           } catch (e) { msg.className = 'small err'; msg.textContent = `❌ ${e.message}`; }
         } }, 'שמירה'))));
