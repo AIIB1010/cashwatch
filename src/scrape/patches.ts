@@ -41,8 +41,11 @@ export const PATCHES: Patch[] = [
     id: 'mizrahi-postlogin',
     file: 'lib/scrapers/mizrahi.js',
     from: 'await Promise.race([(0, _elementsInteractions.waitUntilElementFound)(page, afterLoginSelector), (0, _elementsInteractions.waitUntilElementFound)(page, invalidPasswordSelector), (0, _navigation.waitForUrl)(page, CHANGE_PASSWORD_URL)]);',
-    to: 'await Promise.race([(0, _elementsInteractions.waitUntilElementFound)(page, afterLoginSelector), (0, _navigation.waitForUrl)(page, CHANGE_PASSWORD_URL), new Promise((resolve) => setTimeout(resolve, 25000))]); /* cashwatch-patch:mizrahi-postlogin */',
-    note: 'מזרחי: ממתין לסיום הכניסה לפני שמכריז על סיסמה שגויה',
+    // החלפת סיסמה היא מסלול אפשרי בלבד. waitForUrl דוחה Promise כשהוא לא קורה,
+    // ולכן אסור שידחה את כל הכניסה הרגילה. ברשת איטית מזרחי מציג "מיד מעבירים"
+    // לפני המעבר בפועל; נותנים לו עד דקה וחצי, אך נשארים בתוך תקרת הניסיון של 3 דקות.
+    to: 'await Promise.race([(0, _elementsInteractions.waitUntilElementFound)(page, afterLoginSelector).catch(() => new Promise(() => {})), (0, _navigation.waitForUrl)(page, CHANGE_PASSWORD_URL).catch(() => new Promise(() => {})), new Promise((resolve) => setTimeout(resolve, 90000))]); /* cashwatch-patch:mizrahi-postlogin */',
+    note: 'מזרחי: מסלול החלפת סיסמה אינו מפיל כניסה רגילה; המתנה סלחנית למעבר לחשבון',
   },
   {
     id: 'mizrahi-success',
@@ -66,8 +69,8 @@ PATCHES.push(
     id: 'nav-redirect',
     file: 'lib/helpers/navigation.js',
     from: 'async function waitForRedirect(pageOrFrame, timeout = 20000, clientSide = false, ignoreList = []) {',
-    to: 'async function waitForRedirect(pageOrFrame, timeout = 60000, clientSide = false, ignoreList = []) { /* cashwatch-patch:nav-redirect */',
-    note: 'כל הבנקים: המתנה של עד 60 שניות להתקדמות הדף אחרי כניסה (במקום 20)',
+    to: 'async function waitForRedirect(pageOrFrame, timeout = 90000, clientSide = false, ignoreList = []) { /* cashwatch-patch:nav-redirect */',
+    note: 'כל הבנקים: המתנה של עד 90 שניות להתקדמות הדף אחרי כניסה (במקום 20)',
   },
   {
     // כשהדף לא מתקדם אחרי "כניסה" כי האתר הציג "פרטים/סיסמה שגויים" (ולא נתפס ע"י הספרייה) – מדווחים סיסמה שגויה במקום TIMEOUT,

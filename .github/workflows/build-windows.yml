@@ -62,12 +62,12 @@ jobs:
           name: CashWatch-Setup
           path: build/CashWatch-Setup-*.exe
           retention-days: 7
-      # Release (טיוטה) – לא נספר במכסת ה-Artifacts, ומשם מורידים את קובץ ההתקנה
+      # Release מפורסם – נדרש כדי שהעדכון מתוך CashWatch יוכל לזהות ולהוריד אותו בלי טוקן.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: CashWatch ${{ steps.ver.outputs.version }}
-          draft: true
+          draft: false
           files: |
             build/CashWatch-Setup-*.exe
             build/CashWatch-Setup-*.exe.sha256

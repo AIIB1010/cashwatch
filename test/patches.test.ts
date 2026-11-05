@@ -17,7 +17,9 @@ test('תיקוני הספרייה: מוחלים פעם אחת, והקובץ נש
   assert.ok(/cashwatch-patch(:mizrahi-balance)?/.test(src));
   assert.doesNotThrow(() => new vm.Script(src, { filename: 'mizrahi.js' }), 'הקובץ אחרי התיקון חייב להיות JS תקין');
   const nav = fs.readFileSync(path.join(root, 'lib/helpers/navigation.js'), 'utf8');
-  assert.ok(nav.includes('cashwatch-patch:nav-redirect') && nav.includes('timeout = 60000'));
+  assert.ok(nav.includes('cashwatch-patch:nav-redirect') && nav.includes('timeout = 90000'));
+  assert.ok(src.includes('cashwatch-patch:mizrahi-postlogin') && src.includes('setTimeout(resolve, 90000)'), 'מזרחי ממתין עד 90 שניות למעבר איטי');
+  assert.ok(src.includes('waitForUrl)(page, CHANGE_PASSWORD_URL).catch(() => new Promise(() => {}))'), 'מסלול החלפת סיסמה שאינו נדרש אינו מפיל כניסה רגילה');
   assert.doesNotThrow(() => new vm.Script(nav, { filename: 'navigation.js' }));
   // הקישור של "סיסמה שגויה" כבר לא גורם לעצירה מיידית
   assert.ok(!src.includes('waitUntilElementFound)(page, invalidPasswordSelector), (0, _navigation'));
