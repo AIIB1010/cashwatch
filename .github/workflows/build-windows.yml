@@ -36,11 +36,23 @@ jobs:
           choco install innosetup -y --no-progress
           $v = (Get-Content package.json | ConvertFrom-Json).version
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" installer\cashwatch.iss
+      - name: גרסה
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+      # הקובץ נשמר גם כ-Artifact (אם נגמרה מכסת האחסון של החשבון – ממשיכים, ה-Release מספיק)
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: CashWatch-Setup
           path: build/CashWatch-Setup-*.exe
+          retention-days: 7
+      # Release (טיוטה) – לא נספר במכסת ה-Artifacts, ומשם מורידים את קובץ ההתקנה
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: CashWatch ${{ steps.ver.outputs.version }}
+          draft: true
           files: build/CashWatch-Setup-*.exe
