@@ -1,0 +1,12 @@
+# מתאים לשרת שרץ ברציפות (עם IP ישראלי). שים לב: אין בקונטיינר חלון דפדפן לכניסה הראשונה לבנק.
+services:
+  cashwatch:
+    build: .
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:8080"]   # לגישה מהרשת הביתית: "8080:8080" + dashboard.host=0.0.0.0 + DASHBOARD_PASSWORD
+    environment:
+      CASHWATCH_NO_OPEN: "1"
+      # DASHBOARD_PASSWORD: "בחר-סיסמה"
+    volumes:
+      - ./data:/data
+    shm_size: "1gb"

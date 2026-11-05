@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+secrets.yaml
+config.yaml
+.env
+*.db
+build
+.keyfile
+.keyfile.dpapi
+*.db-wal
+*.db-shm

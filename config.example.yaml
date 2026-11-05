@@ -1,0 +1,61 @@
+# אופציונלי: ייבוא חד-פעמי להגדרות קיימות. בשימוש רגיל מנהלים הכול מדף ההגדרות בדשבורד.
+timezone: Asia/Jerusalem
+
+schedule:
+  times: ["07:00"]        # ריצה אוטומטית יומית. אפשר גם ["07:00", "19:00"]
+  catchUpHours: 20        # אם השרת היה כבוי בזמן הריצה – ירוץ בעלייה
+
+horizonDays: 35           # כמה ימים קדימה לחשב תחזית
+
+# כל חשבון בנק = כניסה אחת לאתר הבנק.
+# provider: hapoalim | leumi | mizrahi | discount | mercantile | otsarHahayal | union | beinleumi | massad | yahav | oneZero | pagi
+banks:
+  - id: poalim
+    provider: hapoalim
+    label: "הפועלים – משותף"
+    alertBelow: 0         # התראה כשהיתרה הצפויה יורדת מתחת לערך הזה (0 = "לא להיכנס למינוס")
+    overdraftLimit: 0     # מסגרת אוברדראפט (להצגה בלבד)
+  # - id: leumi
+  #   provider: leumi
+  #   label: "לאומי – פרטי"
+
+# כל חברת אשראי = כניסה אחת לאתר. fundingAccount = מאיזה חשבון בנק יורד החיוב.
+# provider: isracard | amex | max | visaCal
+cards:
+  - id: isracard-1
+    provider: isracard
+    label: "ישראכרט"
+    fundingAccount: poalim
+    # billingDay: 2             # יום החיוב בחודש (אם לא צוין – מזוהה אוטומטית)
+    # cardOverrides: { "5678": leumi }   # כרטיס (4 ספרות אחרונות) שיורד מחשבון אחר
+    # chargeMatch: "ישראכרט"    # טקסט שמזהה את שורת החיוב בבנק (יש ברירת מחדל לכל חברה)
+
+scraping:
+  attempts: 3             # ניסיונות חוזרים בכשל זמני (לא חוזרים על סיסמה שגויה – כדי לא לנעול חשבון)
+  fetchDaysBack: 75
+  futureMonths: 2
+
+dashboard:
+  host: 127.0.0.1         # שנה ל-0.0.0.0 רק עם dashboardPassword ב-secrets.yaml
+  port: 8080
+  # publicUrl: "http://192.168.1.50:8080"   # יופיע בהודעות
+
+alerts:
+  reminderHours: 24       # תזכורת חוזרת על התראה פתוחה
+  okDigest: weekly        # never | weekly | daily – הודעת "הכול תקין" (כדי לדעת שהמערכת חיה)
+
+notifications:
+  email:
+    enabled: false
+    host: smtp.gmail.com
+    port: 587
+    secure: false
+    user: you@gmail.com   # סיסמת אפליקציה (App Password) ב-secrets.yaml
+    from: you@gmail.com
+    to: you@gmail.com
+  whatsapp:
+    enabled: false
+    provider: greenapi    # greenapi | callmebot | twilio
+    to: "972501234567"    # בפורמט בינלאומי, בלי +
+
+# healthcheckUrl: https://hc-ping.com/xxxx   # (אופציונלי) מתריע אם כל המערכת הפסיקה לרוץ
