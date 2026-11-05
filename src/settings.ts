@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { configSchema, secretsSchema, type Config, type Secrets } from './config.ts';
-import { decrypt, encrypt, loadOrCreateKey, shredFile } from './crypto.ts';
+import { decrypt, encrypt, isPassphraseMode, loadKeyUnlessLocked, MIN_PASSPHRASE, passFilePath, shredFile, storeKeyMachineProtected, unwrapWithPassphrase, wrapWithPassphrase } from './crypto.ts';
 import { Store } from './db.ts';
 
 export function validateConfig(c: Config): void {
@@ -22,7 +22,34 @@ export class Settings {
   private cfg: Config | null = null;
   private sec: Secrets | null = null;
 
-  constructor(readonly store: Store, readonly dataDir: string, private readonly key: Buffer) {}
+  constructor(readonly store: Store, readonly dataDir: string, private key: Buffer | null) {}
+
+  /** נעול בסיסמה: פרטי ההתחברות לא נגישים עד unlock */
+  get locked(): boolean { return this.key === null; }
+  get passphraseMode(): boolean { return isPassphraseMode(this.dataDir); }
+
+  unlock(passphrase: string): void {
+    if (this.key) return;
+    this.key = unwrapWithPassphrase(fs.readFileSync(passFilePath(this.dataDir), 'utf8'), passphrase);
+    this.sec = null;
+  }
+
+  /** מפעיל נעילה בסיסמה: המפתח עטוף בסיסמה, ונמחק כל עותק שלו שמוגן רק ע"י המחשב */
+  enablePassphrase(passphrase: string): void {
+    if (!this.key) throw new Error('המערכת נעולה');
+    if (passphrase.length < MIN_PASSPHRASE) throw new Error(`הסיסמה קצרה מדי (לפחות ${MIN_PASSPHRASE} תווים)`);
+    fs.writeFileSync(passFilePath(this.dataDir), wrapWithPassphrase(this.key, passphrase));
+    for (const f of ['.keyfile', '.keyfile.dpapi']) { const p = path.join(this.dataDir, f); if (fs.existsSync(p)) shredFile(p); }
+  }
+
+  /** מבטל נעילה בסיסמה (דורש את הסיסמה הנוכחית) וחוזר להגנת המחשב */
+  disablePassphrase(passphrase: string): void {
+    if (!this.key) throw new Error('המערכת נעולה');
+    const k = unwrapWithPassphrase(fs.readFileSync(passFilePath(this.dataDir), 'utf8'), passphrase);
+    if (!k.equals(this.key)) throw new Error('סיסמה שגויה');
+    storeKeyMachineProtected(this.dataDir, this.key);
+    shredFile(passFilePath(this.dataDir));
+  }
 
   get config(): Config {
     if (!this.cfg) {
@@ -33,6 +60,7 @@ export class Settings {
   }
 
   get secrets(): Secrets {
+    if (!this.key) return secretsSchema.parse({}); // נעול: אין גישה לסודות
     if (!this.sec) {
       const raw = this.store.getKv('secrets');
       const parsed = secretsSchema.parse(raw ? JSON.parse(decrypt(this.key, raw)) : {});
@@ -57,6 +85,7 @@ export class Settings {
   }
 
   updateSecrets(mutate: (s: Secrets) => void): void {
+    if (!this.key) throw new Error('המערכת נעולה – הזן את סיסמת הנעילה בדשבורד');
     const next = structuredClone(this.secrets);
     mutate(next);
     const parsed = secretsSchema.parse(next);
@@ -71,7 +100,7 @@ export class Settings {
     validateConfig(config);
     this.store.setKv('config', JSON.stringify(config));
     this.cfg = config;
-    if (fs.existsSync(secretsPath)) {
+    if (fs.existsSync(secretsPath) && this.key) {
       const secrets = secretsSchema.parse(YAML.parse(fs.readFileSync(secretsPath, 'utf8')) ?? {});
       this.store.setKv('secrets', encrypt(this.key, JSON.stringify(secrets)));
       this.sec = null;
@@ -91,7 +120,7 @@ export function openSettings(opts: { dataDir?: string; configPath?: string; secr
   const dataDir = path.resolve(opts.dataDir ?? process.env.CASHWATCH_DATA ?? 'data');
   fs.mkdirSync(dataDir, { recursive: true });
   const store = new Store(path.join(dataDir, 'cashwatch.db'));
-  const settings = new Settings(store, dataDir, loadOrCreateKey(dataDir));
+  const settings = new Settings(store, dataDir, loadKeyUnlessLocked(dataDir));
   const imported = settings.importYaml(
     path.resolve(opts.configPath ?? process.env.CASHWATCH_CONFIG ?? 'config.yaml'),
     path.resolve(opts.secretsPath ?? process.env.CASHWATCH_SECRETS ?? 'secrets.yaml'),

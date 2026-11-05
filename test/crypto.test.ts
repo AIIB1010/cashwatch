@@ -91,3 +91,38 @@ test('כרטיס: דמי כרטיס עם פטור (חיוב 0 בשקלים) לא
   assert.equal(effectiveAmount({ chargedAmount: 0, originalAmount: -40, originalCurrency: 'USD' }), -40);
   assert.equal(effectiveAmount({ chargedAmount: NaN, originalAmount: -77 }), -77);
 });
+
+test('נעילה בסיסמה: עטיפה/פענוח, סיסמה שגויה נדחית, ובפתיחה מחדש המערכת נעולה עד unlock', async () => {
+  const { wrapWithPassphrase, unwrapWithPassphrase } = await import('../src/crypto.ts');
+  const key = Buffer.alloc(32, 9);
+  const blob = wrapWithPassphrase(key, 'correct horse');
+  assert.deepEqual(unwrapWithPassphrase(blob, 'correct horse'), key);
+  assert.throws(() => unwrapWithPassphrase(blob, 'wrong pass'), /סיסמה שגויה/);
+  assert.ok(!blob.includes(key.toString('hex')) && !blob.includes(key.toString('base64')));
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-lock-'));
+  const opts = { dataDir: dir, configPath: path.join(dir, 'x.yaml'), secretsPath: path.join(dir, 'y.yaml') };
+  let o = openSettings(opts);
+  o.settings.updateSecrets((s) => { s.sources.b1 = { username: 'u', password: 'TOPSECRET' }; });
+  assert.throws(() => o.settings.enablePassphrase('short'), /קצרה/);
+  o.settings.enablePassphrase('correct horse');
+  assert.ok(!fs.existsSync(path.join(dir, '.keyfile')) && !fs.existsSync(path.join(dir, '.keyfile.dpapi')), 'אין עותק של המפתח שמוגן רק ע"י המחשב');
+  o.store.close();
+
+  o = openSettings(opts);
+  assert.equal(o.settings.locked, true);
+  assert.deepEqual(o.settings.secrets.sources, {}, 'נעול: אין סודות');
+  assert.throws(() => o.settings.updateSecrets(() => {}), /נעולה/);
+  assert.throws(() => o.settings.unlock('nope nope'), /שגויה/);
+  assert.equal(o.settings.locked, true);
+  o.settings.unlock('correct horse');
+  assert.equal(o.settings.secrets.sources.b1?.password, 'TOPSECRET');
+  assert.throws(() => o.settings.disablePassphrase('wrong'), /שגויה/);
+  o.settings.disablePassphrase('correct horse');
+  assert.ok(!fs.existsSync(path.join(dir, '.keyfile.pass')));
+  o.store.close();
+  o = openSettings(opts);
+  assert.equal(o.settings.locked, false);
+  assert.equal(o.settings.secrets.sources.b1?.password, 'TOPSECRET', 'הסודות נשארו קריאים אחרי ביטול הנעילה');
+  o.store.close();
+});

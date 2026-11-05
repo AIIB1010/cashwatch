@@ -110,3 +110,61 @@ export function decrypt(key: Buffer, token: string): string {
   d.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8');
 }
+
+// ---------------------------------------------------------------- נעילה בסיסמה (אופציונלי)
+// במצב הזה מפתח ההצפנה לא נשמר ברמת המחשב בכלל: הוא עטוף בסיסמה שרק המשתמש יודע (scrypt + AES-256-GCM).
+// מי שמוצא את המחשב לא יכול לפענח את פרטי ההתחברות גם אם נכנס ל-Windows. המחיר: אחרי כל הפעלת מחשב צריך להזין את
+// הסיסמה פעם אחת בדשבורד, ועד אז לא נעשות כניסות לבנקים.
+const PASS_FILE = '.keyfile.pass';
+const SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 128 * 1024 * 1024 };
+export const MIN_PASSPHRASE = 8;
+
+export const passFilePath = (dataDir: string): string => path.join(dataDir, PASS_FILE);
+export const isPassphraseMode = (dataDir: string): boolean => fs.existsSync(passFilePath(dataDir));
+
+export function wrapWithPassphrase(key: Buffer, passphrase: string): string {
+  const salt = randomBytes(16);
+  const kek = scryptSync(passphrase.normalize('NFKC'), salt, 32, SCRYPT);
+  const iv = randomBytes(12);
+  const c = createCipheriv('aes-256-gcm', kek, iv);
+  const enc = Buffer.concat([c.update(key), c.final()]);
+  return JSON.stringify({ v: 1, kdf: 'scrypt', N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, salt: salt.toString('base64'), iv: iv.toString('base64'), tag: c.getAuthTag().toString('base64'), data: enc.toString('base64') });
+}
+
+/** מפענח את המפתח הראשי. זורק "סיסמה שגויה" אם הסיסמה לא נכונה */
+export function unwrapWithPassphrase(json: string, passphrase: string): Buffer {
+  const f = JSON.parse(json) as { N: number; r: number; p: number; salt: string; iv: string; tag: string; data: string };
+  try {
+    const kek = scryptSync(passphrase.normalize('NFKC'), Buffer.from(f.salt, 'base64'), 32, { N: f.N, r: f.r, p: f.p, maxmem: 128 * 1024 * 1024 });
+    const d = createDecipheriv('aes-256-gcm', kek, Buffer.from(f.iv, 'base64'));
+    d.setAuthTag(Buffer.from(f.tag, 'base64'));
+    return Buffer.concat([d.update(Buffer.from(f.data, 'base64')), d.final()]);
+  } catch {
+    throw new Error('סיסמה שגויה');
+  }
+}
+
+/** טעינת המפתח, או null אם המערכת נעולה בסיסמה (ואז צריך unlock) */
+export function loadKeyUnlessLocked(dataDir: string): Buffer | null {
+  if (process.env.CASHWATCH_MASTER_KEY) return loadOrCreateKey(dataDir);
+  return isPassphraseMode(dataDir) ? null : loadOrCreateKey(dataDir);
+}
+
+/** שומר מפתח בהגנת המחשב (DPAPI ב-Windows / קובץ בהרשאות 600) – בביטול הנעילה בסיסמה */
+export function storeKeyMachineProtected(dataDir: string, key: Buffer, deps?: Partial<KeyDeps>): void {
+  const platform = deps?.platform ?? process.platform;
+  const useDpapi = platform === 'win32' && process.env.CASHWATCH_NO_DPAPI !== '1';
+  const d: KeyDeps = { ...windowsDeps, ...deps, platform };
+  fs.mkdirSync(dataDir, { recursive: true });
+  const plain = path.join(dataDir, '.keyfile');
+  const wrapped = path.join(dataDir, '.keyfile.dpapi');
+  if (useDpapi) {
+    try {
+      const blob = d.protect(key);
+      if (!d.unprotect(blob).equals(key)) throw new Error('אימות עטיפת המפתח נכשל');
+      fs.writeFileSync(wrapped, blob.toString('base64'));
+      return;
+    } catch (e) { console.warn(`⚠️ לא הצלחתי להגן על המפתח עם Windows (${e instanceof Error ? e.message : e}). נשמר בקובץ רגיל.`); }
+  }
+  fs.writeFileSync(plain, key.toString('hex'), { mode: 0o600 });
+}

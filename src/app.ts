@@ -99,11 +99,16 @@ export interface RunSummary {
   channels: { sent: string[]; failed: Array<{ name: string; error: string }> };
   resolved: string[];
   filed?: number;
+  locked?: boolean;
 }
 
 /** הריצה היומית: איסוף -> ניתוח -> התראות. ריצה אחת בכל רגע נתון. */
 export function runDaily(ctx: AppContext, trigger: string, opts: RunOpts = {}): Promise<RunSummary> {
   if (running) return running;
+  if (ctx.settings?.locked) {
+    // נעול בסיסמה: אין גישה לפרטי ההתחברות. לא נרשמת ריצה ולא כשל – מחכים שהמשתמש יפתח בדשבורד
+    return Promise.resolve({ ok: true, sources: [], findings: 0, notified: 0, channels: { sent: [], failed: [] }, resolved: [], locked: true } as RunSummary);
+  }
   progress = { startedAt: new Date().toISOString(), trigger, cancel: false, items: {} };
   // שומר-ראש: ריצה שנתקעה (דפדפן/רשת/נעילה) לא יכולה להשאיר את המערכת "בודקת עכשיו" לשעות
   const mine = doRun(ctx, trigger, opts);

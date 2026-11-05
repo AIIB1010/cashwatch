@@ -42,6 +42,7 @@ function draw() {
     sourcesSection('bank'),
     sourcesSection('card'),
     notificationsSection(),
+    securitySection(),
     apiSection(),
     generalSection(),
     h('p', { class: 'muted small' }, 'פרטי ההתחברות נשמרים מוצפנים במחשב שלך בלבד ואינם נשלחים לשום מקום חוץ מאתר הבנק/חברת האשראי עצמם.'),
@@ -328,6 +329,35 @@ function notificationsSection() {
 async function refreshState() { S = await api('/api/settings'); }
 
 // ---------------------------------------------------------------- כללי
+// ---------------------------------------------------------------- אבטחה
+function securitySection() {
+  const sec = S.security;
+  const msg = h('span', { class: 'small' });
+  const say = (ok, t) => { msg.className = ok ? 'small ok' : 'small err'; msg.textContent = t; };
+  const p1 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'סיסמת נעילה (לפחות 8 תווים)' });
+  const p2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'הקלד שוב' });
+  const enable = h('button', { class: 'btn primary', onclick: async () => {
+    if (p1.value !== p2.value) return say(false, 'הסיסמאות לא זהות');
+    if (!confirm('לאחר ההפעלה, אחרי כל הפעלת מחשב תצטרך להזין את הסיסמה פעם אחת בדשבורד, ועד אז לא יתבצעו בדיקות. אם תשכח אותה – פרטי ההתחברות לא ישוחזרו ותצטרך להזין אותם מחדש. להפעיל?')) return;
+    try { await api('/api/settings/security/passphrase', { method: 'POST', body: JSON.stringify({ passphrase: p1.value }) }); await reload(); } catch (e) { say(false, e.message); }
+  } }, 'הפעל נעילה בסיסמה');
+  const cur = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'הסיסמה הנוכחית' });
+  const disable = h('button', { class: 'btn danger', onclick: async () => {
+    try { await api('/api/settings/security/passphrase', { method: 'DELETE', body: JSON.stringify({ passphrase: cur.value }) }); await reload(); } catch (e) { say(false, e.message); }
+  } }, 'בטל נעילה בסיסמה');
+  return h('section', { class: 'card' },
+    h('h3', {}, 'אבטחה: מה קורה אם המחשב אבד'),
+    h('p', { class: 'muted small' }, sec.platform === 'win32'
+      ? 'ברירת המחדל: פרטי ההתחברות מוצפנים והמפתח קשור למשתמש ה-Windows שלך (לא ניתן לפענוח במחשב אחר). מי שנכנס ל-Windows שלך יכול להפעיל את התוכנה. מומלץ גם סיסמת Windows חזקה והצפנת דיסק (BitLocker).'
+      : 'פרטי ההתחברות מוצפנים והמפתח נשמר בקובץ מוגן בהרשאות במחשב. מומלץ להצפין את הדיסק.'),
+    sec.passphrase
+      ? h('div', {}, h('p', { class: 'small ok' }, '🔒 נעילה בסיסמה פעילה: המפתח לא נשמר במחשב בכלל. מי שמוצא את המחשב לא יכול לקרוא את פרטי ההתחברות.'),
+          h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, cur, disable))
+      : h('div', {}, h('p', { class: 'small' }, 'נעילה בסיסמה (אופציונלי, אבטחה מקסימלית): המפתח עטוף בסיסמה ששמורה רק אצלך. אחרי כל הפעלת מחשב תזין אותה פעם אחת.'),
+          h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, p1, p2, enable)),
+    msg);
+}
+
 // ---------------------------------------------------------------- API ואינטגרציות
 function apiSection() {
   const a = S.api;

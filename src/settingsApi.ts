@@ -86,6 +86,7 @@ export function registerSettingsApi(app: express.Express, ctx: AppContext, hooks
   const settings = ctx.settings;
   const guard = (req: Request, res: Response, fn: () => unknown) => {
     if (!settings) return fail(res, 400, 'ההגדרות במצב הזה הן לקריאה בלבד');
+    if (settings.locked) return fail(res, 423, 'המערכת נעולה בסיסמה. הזן את הסיסמה בדשבורד כדי לערוך הגדרות.');
     try { return fn(); } catch (e) {
       if (e instanceof z.ZodError) return fail(res, 400, e.issues.map((i) => `${i.path.join('.') || 'שדה'}: ${i.message}`).join('; '));
       return fail(res, 400, e instanceof Error ? e.message : String(e));
@@ -128,6 +129,7 @@ export function registerSettingsApi(app: express.Express, ctx: AppContext, hooks
         whatsapp: { enabled: n.whatsapp.enabled, to: n.whatsapp.to, hasKey: !!sec.callmebot?.apiKey },
       },
       api: { hasToken: hasApiToken(ctx.store), webhookUrl: c.integrations.webhookUrl, hasWebhookSecret: !!sec.webhookSecret, headless: c.dashboard.headless, port: c.dashboard.port, host: c.dashboard.host },
+      security: { locked: !!settings?.locked, passphrase: !!settings?.passphraseMode, platform: process.platform },
       editable: !!settings,
       legacySecretsFile: !!settings && fs.existsSync(legacySecretsPath()) && Object.keys(sec.sources).length > 0,
     };
@@ -350,6 +352,19 @@ export function registerSettingsApi(app: express.Express, ctx: AppContext, hooks
       if (b.autoDetect !== undefined) c.recurring.autoDetect = b.autoDetect;
     });
     hooks.onScheduleChange?.();
+    res.json({ ok: true });
+  }));
+
+  // ---------- אבטחה: נעילה בסיסמה ----------
+  app.post('/api/settings/security/passphrase', (req, res) => guard(req, res, () => {
+    const b = z.object({ passphrase: z.string().min(8, 'הסיסמה קצרה מדי (לפחות 8 תווים)').max(200) }).parse(req.body);
+    if (settings!.passphraseMode) throw new Error('הנעילה בסיסמה כבר פעילה');
+    settings!.enablePassphrase(b.passphrase);
+    res.json({ ok: true });
+  }));
+  app.delete('/api/settings/security/passphrase', (req, res) => guard(req, res, () => {
+    const b = z.object({ passphrase: z.string().max(200) }).parse(req.body);
+    settings!.disablePassphrase(b.passphrase);
     res.json({ ok: true });
   }));
 

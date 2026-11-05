@@ -118,3 +118,25 @@ test('CSV: תא טקסט שמתחיל ב-= או + או - או @ מנוטרל', (
   assert.ok(csv.includes("'+cmd") && csv.includes("'@x"));
   assert.ok(csv.includes(',-5,'), 'סכום שלילי אמיתי לא נפגע');
 });
+
+test('נעילה בסיסמה בשרת: state מדווח locked, עריכת הגדרות נחסמת (423), ו-unlock פותח', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-lockapi-'));
+  const opts = { dataDir: dir, configPath: path.join(dir, 'x.yaml'), secretsPath: path.join(dir, 'y.yaml') };
+  const first = openSettings(opts);
+  first.settings.enablePassphrase('correct horse');
+  first.store.close();
+  const { settings, store } = openSettings(opts);
+  const ctx = { store, provider: new MockScrapeProvider('2026-11-05'), dataDir: dir, log: () => {}, settings, get config() { return settings.config; }, get secrets() { return settings.secrets; }, channels: [] } as any;
+  const server = createApp(ctx).listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const post = (p: string, body: unknown, method = 'POST') => fetch(base + p, { method, headers: { 'content-type': 'application/json', 'x-requested-with': 'cashwatch' }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await (await fetch(base + '/api/state')).json() as any).locked, true);
+    assert.equal((await post('/api/settings/notifications', { desktop: { enabled: true } }, 'PUT')).status, 423);
+    assert.equal((await post('/api/unlock', { passphrase: 'bad bad bad' })).status, 401);
+    assert.equal((await post('/api/unlock', { passphrase: 'correct horse' })).status, 200);
+    assert.equal((await (await fetch(base + '/api/state')).json() as any).locked, false);
+    assert.equal((await post('/api/settings/notifications', { desktop: { enabled: true } }, 'PUT')).status, 200);
+  } finally { server.close(); store.close(); }
+});

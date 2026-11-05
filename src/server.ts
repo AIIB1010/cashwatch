@@ -96,6 +96,7 @@ export function createApp(ctx: AppContext, hooks: { onScheduleChange?: () => voi
     const labels = new Map([...ctx.config.banks, ...ctx.config.cards].map((s) => [s.id, s]));
     res.json({
       version: APP_VERSION,
+      locked: !!ctx.settings?.locked,
       detection: explainDetection(ctx),
       now: (ctx.nowFn?.() ?? new Date()).toISOString(),
       today: analysis.today,
@@ -174,6 +175,23 @@ export function createApp(ctx: AppContext, hooks: { onScheduleChange?: () => voi
     res.json({ ok: true });
   });
 
+  // פתיחת נעילת הסיסמה (פעם אחת אחרי הפעלת המחשב). האטה קלה בניסיון כושל מקשה על ניחושים דרך הממשק
+  let failedUnlocks = 0;
+  app.post('/api/unlock', async (req, res) => {
+    if (!ctx.settings) return void res.status(400).json({ error: 'לא רלוונטי במצב הזה' });
+    const pass = typeof req.body?.passphrase === 'string' ? req.body.passphrase : '';
+    try {
+      if (failedUnlocks >= 3) await new Promise((r) => setTimeout(r, Math.min(failedUnlocks, 10) * 1000));
+      ctx.settings.unlock(pass);
+      failedUnlocks = 0;
+      ctx.log('🔓 המערכת נפתחה');
+      res.json({ ok: true });
+    } catch (e) {
+      failedUnlocks++;
+      res.status(401).json({ error: e instanceof Error ? e.message : 'סיסמה שגויה' });
+    }
+  });
+
   app.post('/api/run', (_req, res) => {
     if (isRunning()) return void res.status(409).json({ error: 'ריצה כבר מתבצעת' });
     runDaily(ctx, 'manual', { force: true, quick: true }).catch((e) => ctx.log(`ריצה ידנית נכשלה: ${e instanceof Error ? e.message : e}`));
@@ -205,6 +223,10 @@ export function startServer(ctx: AppContext): { close: () => void } {
   const server = app.listen(port, host, () => {
     const url = `http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`;
     ctx.log(`📊 דשבורד: ${url}`);
+    if (ctx.settings?.locked) {
+      ctx.log('🔒 המערכת נעולה בסיסמה – פתח את CashWatch והזן סיסמה כדי שהבדיקות יחזרו לרוץ');
+      void import('./notify/desktop.ts').then((m) => m.sendDesktopNotification('CashWatch נעול', 'פתח את CashWatch והזן את סיסמת הנעילה כדי שהבדיקות האוטומטיות יתחילו')).catch(() => {});
+    }
     try { const n = cleanupIssuerItems(ctx.store); if (n) ctx.log(`🧹 הוסרו ${n} הוראות קבועות אוטומטיות שהן חיובי כרטיס אשראי`); } catch { /* לא קריטי */ }
     if (!process.env.CASHWATCH_NO_OPEN && !ctx.config.dashboard.headless && process.stdout.isTTY && ['win32', 'darwin'].includes(process.platform)) openDashboardWindow(url, ctx.dataDir);
   });
@@ -220,6 +242,7 @@ export function startServer(ctx: AppContext): { close: () => void } {
   const tick = async () => {
     try {
       const c = ctx.config;
+      if (ctx.settings?.locked) return; // נעול בסיסמה – מחכים שהמשתמש יפתח בדשבורד
       if (isRunning() || (!c.banks.length && !c.cards.length)) return;
       const lastOk = ctx.store.lastSuccessfulRun();
       const lastAttempt = ctx.store.lastRunStartedAt();

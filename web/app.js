@@ -5,6 +5,27 @@ let sig = '';
 const onDashboard = () => location.hash !== '#settings';
 
 /** טוען מצב. מרנדר מחדש רק כשהנתונים באמת השתנו (מונע הבהוב). */
+let lockDlg = null;
+/** מסך נעילה: מוצג כשהמערכת נעולה בסיסמה (פרטי ההתחברות לא נגישים עד שמזינים אותה) */
+function showLock() {
+  if (lockDlg?.isConnected) return;
+  const input = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'סיסמת הנעילה', style: 'width:100%' });
+  const err = h('p', { class: 'err', hidden: true });
+  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'פתח');
+  lockDlg = h('dialog', { class: 'lock' }, h('form', { method: 'dialog', onsubmit: async (ev) => {
+    ev.preventDefault(); btn.disabled = true; err.hidden = true;
+    try { await api('/api/unlock', { method: 'POST', body: JSON.stringify({ passphrase: input.value }) }); lockDlg.remove(); lockDlg = null; await load(true); }
+    catch (e) { err.textContent = e.message; err.hidden = false; btn.disabled = false; input.select(); }
+  } },
+    h('h3', {}, '🔒 CashWatch נעול'),
+    h('p', { class: 'muted small' }, 'הזן את סיסמת הנעילה כדי שהבדיקות האוטומטיות יחזרו לרוץ. עד אז המערכת לא מתחברת לבנקים. את הנתונים שכבר נאספו אפשר לראות.'),
+    input, err, h('div', { class: 'dlg-actions' }, h('span', { class: 'spacer' }), btn)));
+  lockDlg.addEventListener('cancel', (e) => e.preventDefault());
+  document.body.append(lockDlg);
+  lockDlg.showModal();
+  input.focus();
+}
+
 async function load(force = false) {
   const next = await api('/api/state');
   // דלי של 5 דקות בחתימה: כך הטקסטים היחסיים ("לפני X") מתעדכנים גם כשהנתונים עצמם לא השתנו
@@ -12,6 +33,7 @@ async function load(force = false) {
   const changed = force || nextSig !== sig;
   sig = nextSig;
   state = next;
+  if (state.locked) showLock();
   updateChrome();
   if (changed && onDashboard()) renderDash();
   return state;
