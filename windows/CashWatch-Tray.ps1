@@ -43,17 +43,33 @@ if (-not (Test-Path (Join-Path $root 'node_modules'))) {
   if ($p.ExitCode -ne 0) { [System.Windows.Forms.MessageBox]::Show('ההתקנה נכשלה.', 'CashWatch') | Out-Null; exit 1 }
 }
 
-$server = $null
-if (-not (Test-Server)) {
+ $script:server = $null
+function Start-CashWatchServer {
+  if (Test-Server) { return $true }
+  # אם תהליך קודם עוד עולה, לא מפעילים מופע שני. אם הוא כבר מת – אפשר להתאושש.
+  if ($script:server -and -not $script:server.HasExited) { return $false }
   $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = 'cmd.exe'
-  $psi.Arguments = $(if ($bundled) { '/c node node_modules\tsx\dist\cli.mjs src\cli.ts serve' } else { '/c npm run dev' })
+  # מפעילים את node.exe ישירות. עטיפת cmd.exe יכולה להיכשל או להישאר כתהליך ביניים
+  # אחרי עדכון, בעוד שהפעלה ידנית של אותו node עובדת.
+  if ($bundled) {
+    $psi.FileName = Join-Path $rt 'node.exe'
+    $psi.Arguments = 'node_modules\tsx\dist\cli.mjs src\cli.ts serve'
+  } else {
+    $psi.FileName = (Get-Command node -ErrorAction Stop).Source
+    $psi.Arguments = 'node_modules\tsx\dist\cli.mjs src\cli.ts serve'
+  }
   $psi.WorkingDirectory = $root
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $psi.EnvironmentVariables['CASHWATCH_NO_OPEN'] = '1'
-  $server = [System.Diagnostics.Process]::Start($psi)
+  try {
+    $script:server = [System.Diagnostics.Process]::Start($psi)
+    return $true
+  } catch {
+    return $false
+  }
 }
+Start-CashWatchServer | Out-Null
 
 # אייקון (נצייר אותו, כדי לא להיות תלויים בקובץ)
 $bmp = New-Object System.Drawing.Bitmap 32, 32
@@ -111,6 +127,18 @@ $timer.add_Tick({
   }
 })
 $timer.Start()
+
+# עדכון/קריסה יכולים לסגור את השרת בלי לסגור את אייקון המגש. בעבר המגש נשאר
+# עם mutex חי, ולחיצה נוספת פתחה localhost מת בלי להפעיל שרת. בודקים בעדינות
+# כל 15 שניות ומפעילים מחדש רק אם תהליך השרת הקודם כבר הסתיים.
+$health = New-Object System.Windows.Forms.Timer
+$health.Interval = 15000
+$health.add_Tick({
+  if (-not (Test-Server) -and (-not $script:server -or $script:server.HasExited)) {
+    Start-CashWatchServer | Out-Null
+  }
+})
+$health.Start()
 
 [System.Windows.Forms.Application]::Run((New-Object System.Windows.Forms.ApplicationContext))
 $mutex.ReleaseMutex()
